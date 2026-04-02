@@ -65,7 +65,7 @@ export default definePluginEntry({
       { name: "monitor_ctl" },
     );
 
-    api.registerTool(() => createDailyReportTool({ getDb, logger: api.logger }), {
+    api.registerTool(() => createDailyReportTool({ getDb, monitors, logger: api.logger }), {
       name: "daily_report",
     });
 
