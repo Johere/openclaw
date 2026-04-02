@@ -1,0 +1,49 @@
+{
+  "id": "smarthome-video",
+  "name": "SmartHome Video",
+  "description": "Smart home video monitoring plugin with motion detection, VLM summarization, and daily reports.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "monitors": {
+        "type": "object",
+        "description": "Per-source monitor configurations keyed by source_id.",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Human-readable monitor name."
+            },
+            "dbPath": {
+              "type": "string",
+              "description": "Path to the SQLite database for this monitor."
+            },
+            "vlmTask": {
+              "type": "string",
+              "description": "VLM task name for video understanding (e.g. refrigerator_monitor).",
+              "default": "refrigerator_monitor"
+            },
+            "vlmServiceUrl": {
+              "type": "string",
+              "description": "VLM service base URL.",
+              "default": "http://localhost:8192"
+            },
+            "fileServerBase": {
+              "type": "string",
+              "description": "HTTP file server base URL for serving recordings.",
+              "default": "http://localhost:8199"
+            },
+            "recordingsDir": {
+              "type": "string",
+              "description": "Directory where continuous recordings are stored."
+            }
+          },
+          "required": ["name", "dbPath"]
+        }
+      }
+    }
+  }
+}

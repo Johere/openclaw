@@ -1,0 +1,22 @@
+{
+  "name": "@openclaw/smarthome-video",
+  "version": "2026.4.1",
+  "private": true,
+  "description": "OpenClaw smart home video monitoring plugin",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.49",
+    "better-sqlite3": "11.8.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.12"
+  },
+  "openclaw": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    },
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
