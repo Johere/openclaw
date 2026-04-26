@@ -1,0 +1,19 @@
+{
+  "name": "@openclaw/diagram-to-visio",
+  "version": "2026.4.9",
+  "private": true,
+  "description": "OpenClaw diagram-to-Visio conversion plugin",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.49",
+    "jszip": "3.10.1"
+  },
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

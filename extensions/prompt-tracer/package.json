@@ -1,0 +1,18 @@
+{
+  "name": "@openclaw/prompt-tracer",
+  "version": "2026.4.9",
+  "private": true,
+  "description": "OpenClaw prompt tracer plugin: capture full-chain LLM prompt traces with a self-contained viewer.",
+  "type": "module",
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    },
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

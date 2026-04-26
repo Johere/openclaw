@@ -1,0 +1,11 @@
+{
+  "id": "diagram-to-visio",
+  "name": "Diagram to Visio",
+  "description": "Convert diagram images (architecture diagrams, flowcharts, org charts) into editable Visio (.vsdx) files using vision model extraction.",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

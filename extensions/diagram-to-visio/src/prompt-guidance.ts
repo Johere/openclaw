@@ -1,0 +1,3 @@
+export const DIAGRAM_TO_VISIO_AGENT_GUIDANCE = `When a user provides a diagram image (architecture diagram, flowchart, org chart, sequence diagram) and wants to convert it to an editable Visio file, use the \`diagram_to_visio\` tool. This tool analyzes the image with a vision model to extract shapes, connections, and labels, then generates a .vsdx file that Microsoft Visio and LibreOffice Draw can open and edit.
+
+The tool works best with clear, well-labeled diagrams. It supports common shape types (rectangles, circles, diamonds, hexagons, cylinders, etc.) and understands connections, arrows, and grouping/containers.`;

@@ -1,0 +1,88 @@
+{
+  "id": "prompt-tracer",
+  "name": "Prompt Tracer",
+  "description": "Capture full-chain LLM prompt traces (system prompt, LLM input, wire body, tool calls, assistant reply) to an XML file with a self-contained HTML viewer.",
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Prompt Tracer",
+      "help": "When enabled, the plugin listens for /trace_start and /trace_end commands to capture per-session traces."
+    },
+    "tracesDir": {
+      "label": "Traces Directory",
+      "help": "Directory where XML traces and viewer HTML files are written. Supports ~ expansion."
+    },
+    "maxBytesPerPrompt": {
+      "label": "Max Bytes Per Prompt",
+      "help": "Maximum bytes retained per prompt/wire-body phase. Larger payloads are replaced with a digest and truncation marker."
+    },
+    "captureWireBody": {
+      "label": "Capture Wire Body",
+      "help": "Wrap provider stream functions to capture the final HTTP body sent to the model. Requires the provider to expose wrapStreamFn."
+    },
+    "captureImages": {
+      "label": "Capture Images",
+      "help": "Record image base64 data as-is. Disable to omit images from the trace for smaller files."
+    },
+    "autoStartChannels": {
+      "label": "Auto-Start Channels",
+      "help": "List of channel ids that start capturing automatically without /trace_start."
+    },
+    "viewer.theme": {
+      "label": "Viewer Theme",
+      "help": "Default theme used by the HTML viewer."
+    },
+    "viewer.inlineXml": {
+      "label": "Inline XML in Viewer",
+      "help": "Embed the XML inside the viewer HTML so it opens via file:// without fetch."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "tracesDir": {
+        "type": "string"
+      },
+      "maxBytesPerPrompt": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 16777216,
+        "default": 262144
+      },
+      "captureWireBody": {
+        "type": "boolean",
+        "default": true
+      },
+      "captureImages": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoStartChannels": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      },
+      "viewer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "theme": {
+            "type": "string",
+            "enum": ["light", "dark"],
+            "default": "dark"
+          },
+          "inlineXml": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  }
+}
