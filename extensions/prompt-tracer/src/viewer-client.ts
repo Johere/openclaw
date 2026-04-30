@@ -9,18 +9,18 @@ export const VIEWER_CLIENT_SCRIPT = /* language=javascript */ `
   const PHASE_COLORS = {
     before_prompt_build: { bg: '#1e3a5f', border: '#4a9eff', label: 'Prompt Build', text: '#7cc4ff' },
     llm_input:          { bg: '#2d1b5e', border: '#a855f7', label: 'LLM Input',    text: '#c084fc' },
-    wire_body:          { bg: '#1a1a2e', border: '#6b7280', label: 'Wire Body',    text: '#9ca3af' },
     tool_call:          { bg: '#3b1f00', border: '#f97316', label: 'Tool Call',    text: '#fb923c' },
     llm_output:         { bg: '#052e16', border: '#22c55e', label: 'LLM Output',   text: '#4ade80' },
     message_write:      { bg: '#1e293b', border: '#64748b', label: 'Msg Write',    text: '#94a3b8' },
+    wire_body_placeholder: { bg: '#1f1f23', border: '#52525b', label: 'Wire Body', text: '#a1a1aa' },
   };
   const PHASE_COLORS_LIGHT = {
     before_prompt_build: { bg: '#dbeafe', border: '#3b82f6', label: 'Prompt Build', text: '#1d4ed8' },
     llm_input:          { bg: '#ede9fe', border: '#7c3aed', label: 'LLM Input',    text: '#5b21b6' },
-    wire_body:          { bg: '#f1f5f9', border: '#94a3b8', label: 'Wire Body',    text: '#475569' },
     tool_call:          { bg: '#fff7ed', border: '#ea580c', label: 'Tool Call',    text: '#c2410c' },
     llm_output:         { bg: '#dcfce7', border: '#16a34a', label: 'LLM Output',   text: '#15803d' },
     message_write:      { bg: '#f8fafc', border: '#cbd5e1', label: 'Msg Write',    text: '#475569' },
+    wire_body_placeholder: { bg: '#f4f4f5', border: '#a1a1aa', label: 'Wire Body', text: '#71717a' },
   };
 
   // ── State ───────────────────────────────────────────────────────────────────
@@ -67,6 +67,22 @@ export const VIEWER_CLIENT_SCRIPT = /* language=javascript */ `
       }
     }
 
+    const observedTools = { notice: '', tools: [] };
+    const observedEl = traceEl.querySelector('observedTools');
+    if (observedEl) {
+      const noticeEl = observedEl.querySelector('notice');
+      if (noticeEl) observedTools.notice = noticeEl.textContent || '';
+      for (const t of observedEl.querySelectorAll('tool')) {
+        observedTools.tools.push({
+          name: t.getAttribute('name') || '',
+          callCount: parseInt(t.getAttribute('callCount') || '0', 10),
+          firstSeenAt: t.getAttribute('firstSeenAt') || '',
+          lastSeenAt: t.getAttribute('lastSeenAt') || '',
+          paramKeys: (t.getAttribute('paramKeys') || '').split(',').filter(Boolean),
+        });
+      }
+    }
+
     const turns = [];
     for (const turnEl of traceEl.querySelectorAll('turns > turn')) {
       const phases = [];
@@ -84,7 +100,7 @@ export const VIEWER_CLIENT_SCRIPT = /* language=javascript */ `
             attrs: Object.fromEntries(Array.from(child.attributes).map(a => [a.name, a.value])),
           };
         }
-        // For phases with direct CDATA (wire_body, message_write)
+        // For phases with direct CDATA (e.g. message_write)
         if (!Object.keys(phase.children).length) {
           phase.rawText = phaseEl.textContent;
         }
@@ -106,6 +122,7 @@ export const VIEWER_CLIENT_SCRIPT = /* language=javascript */ `
       startedAt: traceEl.getAttribute('startedAt'),
       endedAt: traceEl.getAttribute('endedAt'),
       meta,
+      observedTools,
       turns,
     };
   }
@@ -151,13 +168,106 @@ export const VIEWER_CLIENT_SCRIPT = /* language=javascript */ `
     const pal = palette();
     const color = pal[phase.kind] || pal.message_write;
 
-    title.textContent = (color.label || phase.kind) + (phase.attrs.name ? ': ' + phase.attrs.name : '');
+    title.textContent = (color.label || phase.kind) + (phase.attrs && phase.attrs.name ? ': ' + phase.attrs.name : '');
     title.style.color = color.text;
 
-    const content = formatContent(phase);
-    body.textContent = content || '(empty)';
+    if (phase.kind === 'wire_body_placeholder') {
+      body.innerHTML = '';
+      body.appendChild(renderWireBodyPlaceholderBody());
+    } else {
+      const content = formatContent(phase);
+      body.textContent = content || '(empty)';
+    }
     drawer.style.display = 'flex';
     selectedNode = phase;
+  }
+
+  // ── Wire body placeholder drawer content ────────────────────────────────────
+  function renderWireBodyPlaceholderBody() {
+    const isDark = theme === 'dark';
+    const mutedColor = isDark ? '#a1a1aa' : '#71717a';
+    const borderColor = isDark ? '#3f3f46' : '#e4e4e7';
+    const cellTextColor = isDark ? '#e4e4e7' : '#18181b';
+    const headerBg = isDark ? '#27272a' : '#f4f4f5';
+
+    const container = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
+
+    const notice = (parsedTrace && parsedTrace.observedTools && parsedTrace.observedTools.notice)
+      || 'wire body unavailable, full tool schema list can not recoverable without wrapStreamFn';
+    container.appendChild(el('div', {
+      style: {
+        padding: '10px 12px',
+        border: '1px solid ' + (isDark ? '#713f12' : '#fde68a'),
+        background: isDark ? '#1c1917' : '#fffbeb',
+        color: isDark ? '#fbbf24' : '#92400e',
+        borderRadius: '6px',
+        fontSize: '12px',
+        lineHeight: '1.5',
+      },
+    }, '⚠ ' + notice));
+
+    container.appendChild(el('div', {
+      style: { fontSize: '13px', fontWeight: 'bold', color: cellTextColor, marginTop: '4px' },
+    }, 'Tools observed this trace'));
+
+    const tools = (parsedTrace && parsedTrace.observedTools && parsedTrace.observedTools.tools) || [];
+    if (tools.length === 0) {
+      container.appendChild(el('div', {
+        style: { color: mutedColor, fontSize: '12px' },
+      }, '(no tool invocations observed yet)'));
+      return container;
+    }
+
+    const table = el('table', {
+      style: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        fontSize: '12px',
+        color: cellTextColor,
+      },
+    });
+    const thead = el('thead');
+    const headerRow = el('tr');
+    for (const h of ['Tool', 'Calls', 'First seen', 'Last seen', 'Param keys']) {
+      headerRow.appendChild(el('th', {
+        style: {
+          textAlign: 'left',
+          padding: '6px 8px',
+          borderBottom: '1px solid ' + borderColor,
+          background: headerBg,
+          fontWeight: '600',
+        },
+      }, h));
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    for (const t of tools) {
+      const tr = el('tr');
+      const cells = [
+        t.name,
+        String(t.callCount),
+        t.firstSeenAt,
+        t.lastSeenAt,
+        (t.paramKeys || []).join(', ') || '—',
+      ];
+      for (const c of cells) {
+        tr.appendChild(el('td', {
+          style: {
+            padding: '6px 8px',
+            borderBottom: '1px solid ' + borderColor,
+            verticalAlign: 'top',
+            fontFamily: 'ui-monospace, monospace',
+          },
+        }, c));
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    return container;
   }
 
   function closeDrawer() {
@@ -279,14 +389,28 @@ export const VIEWER_CLIENT_SCRIPT = /* language=javascript */ `
         },
       });
 
+      // Inject a wire_body placeholder right after llm_input in each turn.
+      const displayPhases = [];
+      for (const p of turn.phases) {
+        displayPhases.push(p);
+        if (p.kind === 'llm_input') {
+          displayPhases.push({
+            kind: 'wire_body_placeholder',
+            at: p.at,
+            attrs: {},
+            children: {},
+          });
+        }
+      }
+
       const nodes = [];
-      for (let pi = 0; pi < turn.phases.length; pi++) {
-        const phase = turn.phases[pi];
+      for (let pi = 0; pi < displayPhases.length; pi++) {
+        const phase = displayPhases[pi];
         const node = renderPhaseNode(phase, turn.index, pi);
         nodes.push(node);
         nodeRow.appendChild(node);
 
-        if (pi < turn.phases.length - 1) {
+        if (pi < displayPhases.length - 1) {
           nodeRow.appendChild(el('div', {
             style: {
               color: isDark ? '#374151' : '#d1d5db',

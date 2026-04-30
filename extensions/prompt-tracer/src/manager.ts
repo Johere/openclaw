@@ -63,6 +63,7 @@ export class TraceManager {
       meta: { channel },
       estimatedBytes: 0,
       activeTurn: null,
+      observedTools: new Map(),
     };
     this.sessions.set(sessionKey, session);
     return traceId;
@@ -123,6 +124,38 @@ export class TraceManager {
     // Checkpoint if memory is getting large.
     if (s.estimatedBytes >= CHECKPOINT_BYTES) {
       void this.checkpoint(sessionKey);
+    }
+  }
+
+  /**
+   * Record an observed tool invocation. Accumulates tool name + the union of
+   * param keys seen so far. Used to build the "Tools observed this trace"
+   * table when wire_body is unavailable.
+   */
+  recordToolObservation(
+    sessionKey: string,
+    toolName: string,
+    params: Record<string, unknown>,
+    at: string,
+  ): void {
+    const s = this.sessions.get(sessionKey);
+    if (!s || s.status !== "recording") { return; }
+    const existing = s.observedTools.get(toolName);
+    const keys = Object.keys(params ?? {});
+    if (!existing) {
+      s.observedTools.set(toolName, {
+        toolName,
+        callCount: 1,
+        firstSeenAt: at,
+        lastSeenAt: at,
+        paramKeys: keys,
+      });
+      return;
+    }
+    existing.callCount += 1;
+    existing.lastSeenAt = at;
+    for (const k of keys) {
+      if (!existing.paramKeys.includes(k)) { existing.paramKeys.push(k); }
     }
   }
 

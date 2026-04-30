@@ -3,7 +3,6 @@ export type TraceStatus = "idle" | "recording" | "flushing";
 export type PhaseKind =
   | "before_prompt_build"
   | "llm_input"
-  | "wire_body"
   | "tool_call"
   | "llm_output"
   | "message_write";
@@ -26,16 +25,6 @@ export type PhaseLlmInput = {
   prompt: string;
   historyMessages: unknown[];
   imagesCount: number;
-};
-
-export type PhaseWireBody = {
-  kind: "wire_body";
-  at: string;
-  /** Serialized wire body, possibly truncated. */
-  body: string;
-  truncated: boolean;
-  originalBytes?: number;
-  digest: string;
 };
 
 export type PhaseToolCall = {
@@ -77,7 +66,6 @@ export type PhaseMessageWrite = {
 export type PhaseRecord =
   | PhaseBeforePromptBuild
   | PhaseLlmInput
-  | PhaseWireBody
   | PhaseToolCall
   | PhaseLlmOutput
   | PhaseMessageWrite;
@@ -98,6 +86,21 @@ export type TraceMeta = {
   openclawVersion?: string;
 };
 
+/**
+ * Observed-tools table accumulated from `before_tool_call` events across the
+ * whole trace. This is the best substitute we have for a pre-normalization
+ * tools[] snapshot — it only shows tools the LLM actually invoked, not every
+ * tool the LLM was told about. See the design note surfaced in the viewer.
+ */
+export type ObservedTool = {
+  toolName: string;
+  callCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  /** Field names observed across invocations (union of all param keys). */
+  paramKeys: string[];
+};
+
 export type TraceSession = {
   status: TraceStatus;
   traceId: string;
@@ -112,4 +115,6 @@ export type TraceSession = {
   estimatedBytes: number;
   /** turn currently being assembled (not yet closed) */
   activeTurn: TurnRecord | null;
+  /** toolName → ObservedTool, accumulated across the entire session */
+  observedTools: Map<string, ObservedTool>;
 };

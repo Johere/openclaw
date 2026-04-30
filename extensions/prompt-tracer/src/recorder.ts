@@ -78,15 +78,17 @@ export function registerRecorderHooks(api: OpenClawPluginApi, manager: TraceMana
     const sessionKey = context?.sessionKey;
     if (!sessionKey || !manager.isRecording(sessionKey)) { return; }
 
+    const at = nowIso();
     const phase: PhaseToolCall = {
       kind: "tool_call",
-      at: nowIso(),
+      at,
       toolName: event.toolName,
       toolCallId: event.toolCallId,
       runId: event.runId,
       params: event.params,
     };
     manager.appendPhase(sessionKey, phase);
+    manager.recordToolObservation(sessionKey, event.toolName, event.params, at);
   });
 
   // after_tool_call: backfill result/error/duration into matching tool_call phase

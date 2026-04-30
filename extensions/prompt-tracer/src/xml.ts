@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { PhaseRecord, TraceMeta, TraceSession, TurnRecord } from "./types.js";
+import type { ObservedTool, PhaseRecord, TraceMeta, TraceSession, TurnRecord } from "./types.js";
 
 // Escape `]]>` inside CDATA sections.
 function escapeCdata(text: string): string {
@@ -83,12 +83,6 @@ function writePhase(phase: PhaseRecord, opts: XmlWriteOptions): string {
       `      <history count="${phase.historyMessages.length}"${attr("truncated", hT.truncated || undefined)}${attr("originalBytes", hT.truncated ? hT.originalBytes : undefined)}><![CDATA[${escapeCdata(hT.value)}]]></history>`,
     );
     lines.push(`    </phase>`);
-  } else if (phase.kind === "wire_body") {
-    lines.push(
-      `    <phase kind="wire_body"${attr("at", phase.at)}${attr("digest", phase.digest)}${attr("truncated", phase.truncated || undefined)}${attr("originalBytes", phase.originalBytes)}>`,
-    );
-    lines.push(`      <![CDATA[${escapeCdata(phase.body)}]]>`);
-    lines.push(`    </phase>`);
   } else if (phase.kind === "tool_call") {
     lines.push(
       `    <phase kind="tool_call"${attr("at", phase.at)}${attr("name", phase.toolName)}${attr("toolCallId", phase.toolCallId)}${attr("runId", phase.runId)}${attr("durationMs", phase.durationMs)}${attr("error", phase.error)}>`,
@@ -145,6 +139,23 @@ function writeTurn(turn: TurnRecord, opts: XmlWriteOptions): string {
   return lines.join("\n");
 }
 
+function writeObservedTools(tools: Map<string, ObservedTool>): string {
+  const lines: string[] = [];
+  lines.push(`  <observedTools count="${tools.size}">`);
+  lines.push(
+    `    <notice><![CDATA[wire body unavailable, full tool schema list can not recoverable without wrapStreamFn]]></notice>`,
+  );
+  const sorted = Array.from(tools.values()).toSorted((a, b) => a.toolName.localeCompare(b.toolName));
+  for (const t of sorted) {
+    const paramKeys = t.paramKeys.toSorted().join(",");
+    lines.push(
+      `    <tool${attr("name", t.toolName)}${attr("callCount", t.callCount)}${attr("firstSeenAt", t.firstSeenAt)}${attr("lastSeenAt", t.lastSeenAt)}${attr("paramKeys", paramKeys)}/>`,
+    );
+  }
+  lines.push(`  </observedTools>`);
+  return lines.join("\n");
+}
+
 function writeMeta(meta: TraceMeta): string {
   const lines: string[] = [];
   lines.push(`  <meta>`);
@@ -163,6 +174,7 @@ export function serializeTraceToXml(session: TraceSession, opts: XmlWriteOptions
     `<trace schema="1"${attr("traceId", session.traceId)}${attr("sessionKey", session.sessionKey)}${attr("sessionId", session.sessionId)}${attr("channel", session.channel)}${attr("startedAt", session.startedAt)}${attr("endedAt", session.endedAt)}>`,
   );
   lines.push(writeMeta(session.meta));
+  lines.push(writeObservedTools(session.observedTools));
   lines.push(`  <turns>`);
 
   const allTurns = [...session.turns];

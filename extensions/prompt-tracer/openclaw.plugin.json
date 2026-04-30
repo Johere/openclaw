@@ -1,7 +1,7 @@
 {
   "id": "prompt-tracer",
   "name": "Prompt Tracer",
-  "description": "Capture full-chain LLM prompt traces (system prompt, LLM input, wire body, tool calls, assistant reply) to an XML file with a self-contained HTML viewer.",
+  "description": "Capture full-chain LLM prompt traces (system prompt, LLM input, tool calls, assistant reply) to an XML file with a self-contained HTML viewer.",
   "uiHints": {
     "enabled": {
       "label": "Enable Prompt Tracer",
@@ -13,11 +13,7 @@
     },
     "maxBytesPerPrompt": {
       "label": "Max Bytes Per Prompt",
-      "help": "Maximum bytes retained per prompt/wire-body phase. Larger payloads are replaced with a digest and truncation marker."
-    },
-    "captureWireBody": {
-      "label": "Capture Wire Body",
-      "help": "Wrap provider stream functions to capture the final HTTP body sent to the model. Requires the provider to expose wrapStreamFn."
+      "help": "Maximum bytes retained per prompt phase. Larger payloads are replaced with a digest and truncation marker."
     },
     "captureImages": {
       "label": "Capture Images",
@@ -52,10 +48,6 @@
         "minimum": 1024,
         "maximum": 16777216,
         "default": 262144
-      },
-      "captureWireBody": {
-        "type": "boolean",
-        "default": true
       },
       "captureImages": {
         "type": "boolean",

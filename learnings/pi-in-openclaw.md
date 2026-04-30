@@ -99,3 +99,111 @@ Feishu channel plugin → 用户看到回复
 | Reply dispatch、`[[reply_to_current]]` / `NO_REPLY` | **OpenClaw** |
 
 **判断口诀**:"怎么跟 LLM 对话"归 Pi,"怎么跟用户和系统对话"归 OpenClaw。
+
+## 5. 量化:OpenClaw 里 Pi 的 import 分布
+
+基于 `src/` + `extensions/` 全量统计(`from "@mariozechner/..."` 出现次数):
+
+| 包 | 次数 | 主要导入符号 |
+|---|---|---|
+| `pi-agent-core` | 191 | `AgentMessage` / `AgentTool` / `AgentEvent` / `StreamFn` / `ThinkingLevel` —— agent loop 消息/事件模型 |
+| `pi-ai` | 190 | `streamSimple` / `streamAnthropic` / `streamOpenAIResponses` / `Model` / `Api` / `Context` / `getModel` / `getApiProvider` / `OAuthCredentials` —— **真正的 provider HTTP 传输与 SSE 解析** |
+| `pi-coding-agent` | 78 | `SessionManager` / `AgentSession` / `codingTools` / `ExtensionAPI` / `Skill` / `createEditTool` / `createReadTool` / `createWriteTool` —— 会话持久化 + 编码工具集 |
+| `pi-tui` | 22 | CLI TUI(`pi` CLI 自用,OpenClaw 几乎只在 `pi-embedded-runner` 外壳里触到) |
+
+### 哪些 extensions 直接 import `pi-ai`(12 个)
+
+```
+anthropic  openai  google  xai  byteplus  github-copilot
+kilocode   kimi-coding  minimax  moonshot  zai
+(+ src/ 自己的 agent/transport 代码)
+```
+
+典型用法就一个模式:`import { streamSimple } from "@mariozechner/pi-ai"` →
+拿来当默认 `StreamFn` → 外面套自己的 `wrapStreamFn` 补 provider 兼容性。
+
+## 6. OpenClaw 自己写的那部分(非 Pi)
+
+用一句话概括:**Pi 负责"跟 LLM 聊天",其它一切都是 OpenClaw 自己的**。
+
+更具体的 5 个板块:
+
+### 6.1 Plugin 系统 + 公开 SDK
+
+- [src/plugin-sdk/](../src/plugin-sdk/) —— `registerProvider` / `registerChannel` /
+  `registerCommand` / hook 注册 / skill 注册的公开契约
+- [src/plugins/](../src/plugins/) —— 插件发现、manifest 校验、loader、注册表
+- 30+ 个 lifecycle hook(`before_prompt_build` / `llm_input` / `llm_output` /
+  `before_tool_call` / `after_tool_call` / ...),详见
+  [agent-lifecycle-hooks.md](./agent-lifecycle-hooks.md)。**Pi 本身没有这些 hook**
+  —— 它是 OpenClaw 在 turn loop 外面补的切面。
+
+### 6.2 Channels(消息入口)
+
+`src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`,
+`src/web`(WhatsApp),以及 bundled plugin 形式的 `matrix` / `zalo` / `feishu` /
+`googlechat` / `line` / `mattermost` / Voice Call 等。
+
+Pi 是 "input → output" 的 agent loop,**没有任何"从 IM 收消息"的概念**。
+Channel 归一化成 `AgentMessage` 喂给 Pi,再把 Pi 的输出拆回 IM 语义
+(`[[reply_to_current]]` / `NO_REPLY` 之类)。
+
+### 6.3 Gateway + 多节点协议
+
+- [src/gateway/](../src/gateway/) —— 控制面 / 节点 wire protocol / bridge
+- `src/gateway/protocol/` —— 类型化的控制面协议(add/remove node、channel 状态、
+  session 路由)
+
+Pi 是单进程内的,**没有"多节点 gateway"这一层**。
+
+### 6.4 Provider 注册/目录/认证/onboarding 适配
+
+每个 `extensions/<provider>/` 里自己写的:
+
+- `registerProvider()` 的 catalog(模型列表 + 价格 + 能力标签)
+- OAuth / API key / Bearer 的 auth flow(`provider-auth.ts`)
+- `onboard.ts`(CLI/UI 引导)
+- **`wrapStreamFn`**(provider-specific 兼容性 patch,见
+  [provider-stream-wrap.md](./provider-stream-wrap.md))
+- 可选 `prepareExtraParams` / `resolveTransportTurnState` /
+  `webSocketSessionPolicy`
+
+这些都是"在 `pi-ai` 已经能说 OpenAI/Anthropic/Gemini 协议的基础上,补 OpenClaw
+的配置、catalog、auth UI、兼容性兜底"。Pi 不管这些。
+
+### 6.5 `pi-embedded-runner` —— 编排层
+
+- [src/agents/pi-embedded-runner/run/attempt.ts](../src/agents/pi-embedded-runner/run/attempt.ts)
+  —— OpenClaw 自己的 turn orchestrator
+- 调用的是 `pi-agent-core` 的类型 + `pi-ai` 的 `streamFn`,但:
+  - System prompt 怎么拼 → OpenClaw 的 `buildAgentSystemPrompt`
+  - Cache boundary 在哪 → OpenClaw(见 [tutorial.md](./tutorial.md) §4.1)
+  - Tools 怎么暴露给 LLM → `createOpenClawCodingTools`(包住 Pi 原生工具,
+    加 OpenClaw 的策略)
+  - Hook 在什么时间触发 → OpenClaw 自己定义的生命周期
+  - Reply 怎么分发回 channel → `src/reply-dispatch/`
+
+### 6.6 其他辅助层(非核心但也是 OpenClaw 自研)
+
+- Session 持久化(JSONL 格式、`~/.openclaw/agents/<id>/sessions/`)——
+  `pi-coding-agent` 有 `SessionManager`,但 **session 文件布局、agentId 路径、
+  gateway 共享机制** 是 OpenClaw 的。
+- Memory plugin(`memory-core` / `memory-lancedb`)、skills 发现、diffs viewer、
+  diagnostics OTel、auth pairing、canvas-host / a2ui bundle 等。
+- CLI(`openclaw` 命令)、Mac app、iOS/Android app、`openclaw doctor`。
+
+## 7. 判断一段代码归谁:三条快速规则
+
+1. **看 import**。`from "@mariozechner/..."` → 是 Pi 的直接消费者(基本就是
+   transport 或 agent loop 边缘)。全是 `openclaw/plugin-sdk/*` 或 `src/**` 的
+   → OpenClaw 自己。
+2. **看能不能不升级 Pi 就改掉**。能 → 属于 OpenClaw;要动 `pi-*` 源码 → 属于 Pi。
+3. **看改动影响范围**。只影响 "跟 LLM 怎么聊"(prompt 内容、tools schema、
+   provider wrap)→ Pi 边界附近;影响 "消息怎么进来/回复怎么出去/插件怎么接入"
+   → 纯 OpenClaw。
+
+---
+
+相关:[provider-stream-wrap.md](./provider-stream-wrap.md) 解释了 `wrapStreamFn +
+onPayload` 为何天然可行 —— `onPayload` 本身是 `pi-ai` 的 `SimpleStreamOptions`
+字段,OpenClaw 是**利用**而非**新增**这个 hook 点做观察/mutate。

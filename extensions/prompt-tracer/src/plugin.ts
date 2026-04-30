@@ -4,7 +4,6 @@ import { handleTraceEnd, handleTraceStart, handleTraceStatus } from "./command.j
 import { createPromptTracerHttpHandler } from "./http.js";
 import { TraceManager } from "./manager.js";
 import { registerRecorderHooks } from "./recorder.js";
-import { createWrapStreamFn } from "./stream-wrap.js";
 
 export function registerPromptTracerPlugin(api: OpenClawPluginApi): void {
   const config = resolvePromptTracerConfig(api.pluginConfig);
@@ -20,25 +19,6 @@ export function registerPromptTracerPlugin(api: OpenClawPluginApi): void {
 
   // Register hook listeners.
   registerRecorderHooks(api, manager);
-
-  // Wire provider stream wrapper for wire_body capture.
-  if (config.captureWireBody) {
-    const wrapFn = createWrapStreamFn(manager, config.maxBytesPerPrompt);
-    api.on("before_prompt_build", (_event, context) => {
-      // When a recording session receives a turn, ensure wrapStreamFn is in place.
-      // The actual wrap is injected via the provider registration hook below.
-      void context;
-    });
-
-    // Register a provider hook to inject our wire-body capture into the stream chain.
-    api.registerProvider({
-      id: "__prompt-tracer-wire-capture__",
-      name: "Prompt Tracer Wire Capture",
-      register: () => undefined,
-      // wrapStreamFn is called by core when the active provider builds its request.
-      wrapStreamFn: wrapFn,
-    } as Parameters<OpenClawPluginApi["registerProvider"]>[0]);
-  }
 
   // Auto-start for configured channels.
   if (config.autoStartChannels.length > 0) {

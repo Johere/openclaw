@@ -17,6 +17,7 @@ function makeSession(overrides?: Partial<TraceSession>): TraceSession {
     meta: { provider: "anthropic", model: "claude-opus-4-7", channel: "feishu" },
     estimatedBytes: 0,
     activeTurn: null,
+    observedTools: new Map(),
     ...overrides,
   };
 }
@@ -142,6 +143,50 @@ describe("serializeTraceToXml", () => {
     const xml1 = serializeTraceToXml(session, OPTS);
     const xml2 = serializeTraceToXml(session, OPTS);
     expect(xml1).toBe(xml2);
+  });
+
+  it("serializes observedTools with notice and sorted tools", () => {
+    const observedTools = new Map([
+      [
+        "zed_tool",
+        {
+          toolName: "zed_tool",
+          callCount: 1,
+          firstSeenAt: "2026-04-25T10:00:02Z",
+          lastSeenAt: "2026-04-25T10:00:02Z",
+          paramKeys: ["b", "a"],
+        },
+      ],
+      [
+        "memory_search",
+        {
+          toolName: "memory_search",
+          callCount: 3,
+          firstSeenAt: "2026-04-25T10:00:01Z",
+          lastSeenAt: "2026-04-25T10:00:04Z",
+          paramKeys: ["query"],
+        },
+      ],
+    ]);
+    const session = makeSession({ observedTools });
+    const xml = serializeTraceToXml(session, OPTS);
+    expect(xml).toContain('<observedTools count="2">');
+    expect(xml).toContain("wire body unavailable");
+    expect(xml).toContain('without wrapStreamFn');
+    // memory_search sorts before zed_tool
+    const memIdx = xml.indexOf('name="memory_search"');
+    const zedIdx = xml.indexOf('name="zed_tool"');
+    expect(memIdx).toBeGreaterThan(-1);
+    expect(zedIdx).toBeGreaterThan(memIdx);
+    // paramKeys are sorted
+    expect(xml).toContain('paramKeys="a,b"');
+    expect(xml).toContain('callCount="3"');
+  });
+
+  it("emits observedTools element even when empty", () => {
+    const xml = serializeTraceToXml(makeSession(), OPTS);
+    expect(xml).toContain('<observedTools count="0">');
+    expect(xml).toContain("wire body unavailable");
   });
 
   it("includes activeTurn phases when present", () => {

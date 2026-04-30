@@ -7,7 +7,6 @@ const PromptTracerConfigSource = z.object({
   enabled: z.boolean().default(true),
   tracesDir: z.string().optional(),
   maxBytesPerPrompt: z.number().int().min(1024).max(16_777_216).default(262_144),
-  captureWireBody: z.boolean().default(true),
   captureImages: z.boolean().default(true),
   autoStartChannels: z.array(z.string()).default([]),
   viewer: z
@@ -22,7 +21,6 @@ export type PromptTracerConfig = {
   enabled: boolean;
   tracesDir: string;
   maxBytesPerPrompt: number;
-  captureWireBody: boolean;
   captureImages: boolean;
   autoStartChannels: string[];
   viewer: {
@@ -35,7 +33,6 @@ const DEFAULT_CONFIG: PromptTracerConfig = {
   enabled: true,
   tracesDir: resolveTracesDir(),
   maxBytesPerPrompt: 262_144,
-  captureWireBody: true,
   captureImages: true,
   autoStartChannels: [],
   viewer: {
@@ -59,7 +56,6 @@ export function resolvePromptTracerConfig(
     enabled: d.enabled,
     tracesDir: resolveTracesDir(d.tracesDir),
     maxBytesPerPrompt: d.maxBytesPerPrompt,
-    captureWireBody: d.captureWireBody,
     captureImages: d.captureImages,
     autoStartChannels: d.autoStartChannels,
     viewer: {

@@ -65,6 +65,9 @@ openclaw/
 └── docs/                   # 文档
 ```
 
+> 1. `src/plugin-sdk/` 是 OpenClaw 暴露给 plugins 的公共 SDK 契约目录（约 379 个文件）。
+> 2. 核心作用: 它是 core ↔ plugin（bundled + 第三方）之间的**唯一合法边界**。插件代码只能 `import "openclaw/plugin-sdk/*"`，不允许从 `src/**` 其他路径深拷贝/深引用 core 内部。
+
 ### 核心设计原则
 
 | 原则                        | 说明                                            | C++/Python 类比                        |
@@ -168,7 +171,8 @@ OpenClaw 的 system prompt 不是一个静态字符串，而是一个 **动态�
                     │     tools.md → bootstrap.md →        │
                     │     memory.md                        │
                     │                                     │
-                    │  10. Plugin prepend/append context   │
+                    │  10. Plugin prependSystemContext /   │
+                    │      appendSystemContext             │
                     │      (via before_prompt_build hook)  │
                     │                                     │
                     ├─── CACHE BOUNDARY ──────────────────┤
@@ -180,6 +184,8 @@ OpenClaw 的 system prompt 不是一个静态字符串，而是一个 **动态�
                     │  13. Provider 动态后缀               │
                     │  14. Runtime 信息                    │
                     │      (agent/OS/model/channel 等)     │
+                    │  15. Plugin prependContext           │
+                    │      (拼到 user prompt 前，每轮变化)   │
                     │                                     │
                     └─────────────────────────────────────┘
 ```
@@ -389,13 +395,52 @@ before_agent_start      → 遗留兼容 hook（组合两个阶段）
 // Hook 返回值
 type PluginHookBeforePromptBuildResult = {
   systemPrompt?: string; // 替换整个 system prompt
-  prependContext?: string; // 动态前置（每轮变化，不缓存）
-  prependSystemContext?: string; // 静态前置（放在 cache boundary 之上）
-  appendSystemContext?: string; // 静态后置（放在 cache boundary 之上）
+  prependContext?: string; // 拼到 user prompt 前面（每轮变化，不缓存）
+  prependSystemContext?: string; // 拼到 system prompt cache boundary 之上（可缓存）
+  appendSystemContext?: string; // 拼到 system prompt cache boundary 之上（可缓存）
 };
 ```
 
-注意 `prependSystemContext` vs `prependContext` 的区别——前者放在 cache boundary 之上（可缓存），后者在之下（每轮重新计算）。这是 harness 工程中对 prompt caching 的精细控制。
+注意三者的区别：
+
+- **`prependSystemContext` / `appendSystemContext`** → 注入 system prompt 的 cache boundary **之上**，属于 STATIC ZONE，跨轮次字节稳定 → provider prefix cache 可命中
+- **`prependContext`** → 拼到 user prompt（不是 system prompt）前面，每轮都会重新生成 → DYNAMIC ZONE，**不可缓存**
+
+这是 harness 工程中对 prompt caching 的精细控制：静态插件指导用 `prependSystemContext` 避免每轮 token 开销，需要随每轮变化的信息才用 `prependContext`。
+
+### 6.1.1 `llm_input` Hook vs Wire Body
+
+OpenClaw 还有一个 `llm_input` hook 紧跟 `before_prompt_build` 执行，暴露的是**文本层**的 prompt 视图；而真正通过 HTTP 发往 LLM provider 的是 **wire body**（序列化后的完整 JSON 请求体）。两者信息量差异很大：
+
+**`llm_input` hook 能拿到的（文本层）：**
+
+| 字段                  | 说明                   |
+| --------------------- | ---------------------- |
+| `systemPrompt`        | 组装完成的 system 文本 |
+| `prompt`              | 当前轮 user prompt     |
+| `historyMessages[]`   | 历史消息数组           |
+| `imagesCount`         | 图像数量               |
+| `provider` / `model`  | 选定的 provider + 模型 |
+| `runId` / `sessionId` | 运行/会话标识          |
+
+**只出现在 wire body 里的（`llm_input` 看不到）：**
+
+| 字段                                          | 为什么重要                                      |
+| --------------------------------------------- | ----------------------------------------------- |
+| `tools[]` JSON schema 完整列表                | 本轮 LLM 被告知哪些工具可用                     |
+| `tool_choice` (`auto`/`required`/具体名)      | 是否强制某个工具                                |
+| `temperature` / `top_p` / `max_tokens`        | Sampling 参数                                   |
+| `stream` / `stream_options`                   | 传输模式                                        |
+| **Anthropic**: `cache_control: ephemeral`     | prompt cache 的边界实际打在哪                   |
+| **Anthropic**: `thinking.budget_tokens`       | Extended thinking 预算                          |
+| **Anthropic**: `tools[i].cache_control`       | 工具定义段的缓存标记                            |
+| **OpenAI Responses**: `reasoning.effort`      | Reasoning 档位                                  |
+| **Gemini**: `generationConfig.thinkingConfig` | Thinking budget                                 |
+| 所有 provider 的专有字段/headers              | retry、request id、provider-specific extensions |
+
+**结论**：文本层覆盖了"发出去的信息"的约 95%，但想排查 **cache miss 为什么没命中**、**tool selection 为什么诡异**、**reasoning 档位是否生效** 这类问题，必须看 wire body。
+
+捕获 wire body 需要 provider 实现 `wrapStreamFn → onPayload` 链——anthropic/openai/openrouter/ollama/xai 都支持；vllm/vercel-ai-gateway 等社区第三方 provider 可能没接这条钩子，需要自行 patch。详见 `extensions/prompt-tracer/` 插件。
 
 #### Tool 执行类
 
