@@ -1,0 +1,30 @@
+{
+  "//": "Standalone build config — compiles this plugin OUTSIDE the openclaw monorepo, against the SDK shipped in the globally-installed `openclaw` npm package. Use this when you've copied the plugin to ~/.openclaw/plugins/<name>/ for local deployment. See README.md.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "outDir": "./dist",
+    "rootDir": ".",
+    "declaration": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "openclaw/plugin-sdk": [
+        "../../node_modules/openclaw/dist/plugin-sdk/index.d.ts"
+      ],
+      "openclaw/plugin-sdk/*": [
+        "../../node_modules/openclaw/dist/plugin-sdk/*.d.ts"
+      ]
+    }
+  },
+  "include": ["./*.ts", "./src/**/*.ts"],
+  "exclude": ["./**/*.test.ts", "./dist/**", "./node_modules/**"]
+}
